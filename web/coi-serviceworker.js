@@ -58,86 +58,41 @@ if (typeof window === 'undefined') {
 
 } else {
     (() => {
-        const reloadedBySelf = window.sessionStorage.getItem("coiReloadedBySelf");
-        window.sessionStorage.removeItem("coiReloadedBySelf");
-        const coepDegrading = (reloadedBySelf == "coepdegrade");
-
-        // You can customize the behavior of this script through a global `coi` variable.
-        const coi = {
-            shouldRegister: () => !reloadedBySelf,
-            shouldDeregister: () => false,
-            coepCredentialless: () => true,
-            coepDegrade: () => true,
-            doReload: () => window.location.reload(),
-            quiet: false,
-            ...window.coi
-        };
-
-        const n = navigator;
-        const controlling = n.serviceWorker && n.serviceWorker.controller;
-
-        // Record the failure if the page is served by serviceWorker.
-        if (controlling && !window.crossOriginIsolated) {
-            window.sessionStorage.setItem("coiCoepHasFailed", "true");
-        }
-        const coepHasFailed = window.sessionStorage.getItem("coiCoepHasFailed");
-
-        if (controlling) {
-            // Reload only on the first failure.
-            const reloadToDegrade = coi.coepDegrade() && !(
-                coepDegrading || window.crossOriginIsolated
-            );
-            n.serviceWorker.controller.postMessage({
-                type: "coepCredentialless",
-                value: (reloadToDegrade || coepHasFailed && coi.coepCredentialless()),
-            });
-            if (reloadToDegrade) {
-                !coi.quiet && console.log("Reloading page to degrade COEP.");
-                window.sessionStorage.setItem("coiReloadedBySelf", "coepdegrade");
-                coi.doReload("coepdegrade");
-            }
-
-            if (coi.shouldDeregister()) {
-                n.serviceWorker.controller.postMessage({ type: "deregister" });
-            }
-        }
-
-        // If we're already coi: do nothing. Perhaps it was done manually, or by the Service Worker.
+        // If already cross-origin isolated, do nothing
         if (window.crossOriginIsolated) {
-            !coi.quiet && console.log("Cross-Origin-Isolated is active.");
+            console.log("Cross-Origin-Isolated is already active.");
             return;
         }
 
-        if (!coi.shouldRegister()) {
-            !coi.quiet && console.log("Not registering Service Worker.");
+        if (!navigator.serviceWorker) {
+            console.error("Service Worker is not supported.");
             return;
         }
 
-        if (!n.serviceWorker) {
-            !coi.quiet && console.error("Service Worker is not supported.");
-            return;
-        }
-
-        // In some environments (e.g. Firefox private mode) securitypolicy is stricter.
-        n.serviceWorker.register(window.document.currentScript.src).then(
+        // Always try to register/update the service worker when not isolated
+        navigator.serviceWorker.register(window.document.currentScript.src).then(
             (registration) => {
-                !coi.quiet && console.log("Service Worker registered", registration.scope);
+                console.log("Service Worker registered", registration.scope);
 
                 registration.addEventListener("updatefound", () => {
-                    !coi.quiet && console.log("Reloading page to use updated Service Worker.");
-                    window.sessionStorage.setItem("coiReloadedBySelf", "updatefound");
-                    coi.doReload();
+                    console.log("Service Worker update found, reloading...");
+                    window.location.reload();
                 });
 
                 // If the registration is active, but it's not controlling the page
-                if (registration.active && !n.serviceWorker.controller) {
-                    !coi.quiet && console.log("Reloading page to use Service Worker.");
-                    window.sessionStorage.setItem("coiReloadedBySelf", "notcontrolling");
-                    coi.doReload();
+                if (registration.active && !navigator.serviceWorker.controller) {
+                    console.log("Service Worker active but not controlling, reloading...");
+                    window.location.reload();
+                }
+
+                // If we have a controller but still not isolated, reload
+                if (navigator.serviceWorker.controller && !window.crossOriginIsolated) {
+                    console.log("Service Worker controlling but not isolated, reloading...");
+                    window.location.reload();
                 }
             },
             (err) => {
-                !coi.quiet && console.error("Service Worker registration failed:", err);
+                console.error("Service Worker registration failed:", err);
             }
         );
     })();
