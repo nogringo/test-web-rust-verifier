@@ -30,7 +30,7 @@ class MainApp extends StatelessWidget {
                   .query(filter: Filter(kinds: [1]))
                   .future;
 
-              print(events);
+              print(events.length);
             },
             child: null,
           ),
